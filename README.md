@@ -61,8 +61,9 @@ for p in probes/*.md; do n=$(basename "$p" .md); ./bin/run.sh "$n" all && ./bin/
   truncated reply **auto-escalates the token cap** (`MODELFIT_MAX_TOKENS` -> ceiling) so a
   reasoning-heavy model can't silently return nothing.
 - `judge.sh` sends the task + rubric + the answer (author hidden) to the judge model and
-  parses a strict JSON verdict: `correctness_pass`, `instruction_following` (0-5),
-  `quality` (0-5), per-criterion checks, notes. Rows append to `results.csv`.
+  parses a strict JSON verdict (`correctness_pass`, `instruction_following` 0-5,
+  `quality` 0-5, per-criterion reasoning, notes). The pass/score/notes summary is the
+  row appended to `results.csv`.
 - `report.sh` ranks by **pass% desc, then quality desc, then cost asc.** Cost and latency
   never rescue a correctness failure.
 - Cost is `tokens x price` from `config/models.json`. **Verify those prices** against each

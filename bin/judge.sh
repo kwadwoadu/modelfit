@@ -20,7 +20,7 @@ PROBE_FILE="$ROOT/probes/$PROBE.md"
 [ -f "$PROBE_FILE" ] || { echo "modelfit: no probe probes/$PROBE.md" >&2; exit 1; }
 [ -f "$SYS" ]        || { echo "modelfit: missing prompts/judge-system.md" >&2; exit 1; }
 
-CATEGORY="$(awk -F': *' '/^category:/{print $2; exit}' "$PROBE_FILE" | tr -d '\r')"
+CATEGORY="$(awk -F': *' '/^category:/{print $2; exit}' "$PROBE_FILE" | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr ',' ';')"
 [ -n "$CATEGORY" ] || CATEGORY="uncategorized"
 
 prompt_section() { awk '/^# *PROMPT[[:space:]]*$/{f=1;next} /^# *RUBRIC[[:space:]]*$/{f=0} f{print}' "$1"; }
@@ -31,6 +31,9 @@ J_base="$(jq -r '.judge.base_url'   "$CONFIG")"
 J_model="$(jq -r '.judge.model_id'  "$CONFIG")"
 J_keyenv="$(jq -r '.judge.key_env'  "$CONFIG")"
 J_tparam="$(jq -r '.judge.token_param // "max_tokens"' "$CONFIG")"
+[ "$J_provider" != "null" ] && [ "$J_base" != "null" ] && [ "$J_model" != "null" ] && [ "$J_keyenv" != "null" ] \
+  || { echo "modelfit: config error: .judge is missing a required field (need provider, base_url, model_id, key_env)" >&2; exit 1; }
+case "$J_provider" in openai|anthropic) ;; *) echo "modelfit: .judge has invalid provider '$J_provider' (must be openai or anthropic)" >&2; exit 1 ;; esac
 J_kv="${!J_keyenv:-}"
 [ -n "$J_kv" ] || { echo "modelfit: judge key \$$J_keyenv not set (add it to .env)" >&2; exit 1; }
 # Reasoning-model judges can spend a small cap entirely on thinking and return no
@@ -53,14 +56,17 @@ judge_call() {  # $1 = user content ; $2 = raw-json path to keep ; echoes the ju
       body="$(jq -n --arg m "$J_model" --argjson mt "$maxtok" --arg tp "$J_tparam" --arg s "$SYS_TXT" --arg u "$user" \
               '{model:$m, messages:[{role:"system",content:$s},{role:"user",content:$u}]} + {($tp):$mt}')"
       curl -s -o "$raw" "$J_base/chat/completions" \
-        -H "content-type: application/json" -H "Authorization: Bearer $J_kv" -d "$body" >/dev/null
+        -H "content-type: application/json" -H "Authorization: Bearer $J_kv" -d "$body" >/dev/null \
+        || { JCALL_ERR="curl failed"; printf ''; return 0; }
     else
       body="$(jq -n --arg m "$J_model" --argjson mt "$maxtok" --arg s "$SYS_TXT" --arg u "$user" \
               '{model:$m, max_tokens:$mt, system:$s, messages:[{role:"user",content:$u}]}')"
       curl -s -o "$raw" "$J_base/v1/messages" \
         -H "content-type: application/json" -H "anthropic-version: 2023-06-01" \
-        -H "x-api-key: $J_kv" -H "Authorization: Bearer $J_kv" -d "$body" >/dev/null
+        -H "x-api-key: $J_kv" -H "Authorization: Bearer $J_kv" -d "$body" >/dev/null \
+        || { JCALL_ERR="curl failed"; printf ''; return 0; }
     fi
+    if [ ! -s "$raw" ] || ! jq -e 'type=="object"' "$raw" >/dev/null 2>&1; then JCALL_ERR="non-JSON, empty, or unexpected response from judge endpoint $J_base"; printf ''; return 0; fi
     err="$(jq -r '.error.message // empty' "$raw" 2>/dev/null)"
     if [ -n "$err" ]; then JCALL_ERR="$err"; printf ''; return 0; fi
     if [ "$J_provider" = "openai" ]; then
@@ -79,10 +85,16 @@ judge_call() {  # $1 = user content ; $2 = raw-json path to keep ; echoes the ju
   done
 }
 
-# Pull the first balanced {...} JSON block out of arbitrary judge text.
+# Extract the JSON object from arbitrary judge text: take from the FIRST "{" to the
+# LAST "}" (so braces inside string values do not truncate it, and surrounding prose
+# or ```json fences are dropped), then let jq validate. Empty output if not valid JSON.
 first_json() {
-  awk 'BEGIN{d=0;s=0}{for(i=1;i<=length($0);i++){c=substr($0,i,1);
-       if(c=="{"){d++;s=1} if(s)printf "%s",c; if(c=="}"){d--; if(d==0){print "";exit}}}}'
+  awk '{ buf = buf $0 "\n" }
+       END {
+         f = index(buf, "{"); if (f == 0) exit
+         l = 0; for (i = length(buf); i >= f; i--) if (substr(buf,i,1) == "}") { l = i; break }
+         if (l >= f) printf "%s", substr(buf, f, l - f + 1)
+       }' | jq -c . 2>/dev/null
 }
 
 judge_one() {
@@ -90,6 +102,11 @@ judge_one() {
   local dir="$ROOT/runs/$RUN_DATE/$key/$PROBE"
   local rf="$dir/result.txt" mf="$dir/meta.txt"
   [ -f "$rf" ] || { echo "[$key/$PROBE] no result.txt for $RUN_DATE, skip"; return 0; }
+  # Skip BEFORE spending judge tokens if this (date,model,probe) was already judged.
+  if [ -f "$CSV" ] && awk -F, -v d="$RUN_DATE" -v k="$key" -v p="$PROBE" 'NR>1 && $1==d && $2==k && $3==p{f=1} END{exit !f}' "$CSV"; then
+    echo "[$key/$PROBE] already in results.csv for $RUN_DATE (delete that row to re-judge), skip"
+    return 0
+  fi
   local cand user resp js pass IF q notes
   cand="$(cat "$rf")"
   user="TASK GIVEN TO THE CANDIDATE:
@@ -108,7 +125,8 @@ Return ONLY the JSON verdict object, nothing else."
   pass="$(printf '%s' "$js"  | jq -r '.correctness_pass // empty'      2>/dev/null)"
   IF="$(printf '%s' "$js"    | jq -r '.instruction_following // empty' 2>/dev/null)"
   q="$(printf '%s' "$js"     | jq -r '.quality // empty'              2>/dev/null)"
-  notes="$(printf '%s' "$js" | jq -r '.notes // empty' 2>/dev/null | tr ',\n' '; ')"
+  # Keep commas (the CSV field is quoted); flatten newlines; double interior quotes per RFC-4180.
+  notes="$(printf '%s' "$js" | jq -r '.notes // empty' 2>/dev/null | tr '\n' ' ' | sed 's/"/""/g')"
   if [ -z "$pass" ]; then
     echo "[$key/$PROBE] judge gave no parseable JSON (raw text -> judge.raw.txt, api -> judge.api.json)"
     printf '%s' "$resp" > "$dir/judge.raw.txt"; return 0
@@ -119,7 +137,7 @@ Return ONLY the JSON verdict object, nothing else."
   intok="$(awk -F= '/^input_tokens=/{print $2}' "$mf" 2>/dev/null)"
   outtok="$(awk -F= '/^output_tokens=/{print $2}' "$mf" 2>/dev/null)"
   trunc="$(awk -F= '/^truncated=/{print $2}'    "$mf" 2>/dev/null)"
-  printf '%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n' \
+  printf '%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,"%s"\n' \
     "$RUN_DATE" "$key" "$PROBE" "$CATEGORY" "$pass" "$IF" "$q" \
     "${cost:-NA}" "${lat:-NA}" "${intok:-NA}" "${outtok:-NA}" "${trunc:-NA}" "$J_model" "$notes" >> "$CSV"
   echo "[$key/$PROBE] judged: pass=$pass IF=$IF quality=$q"

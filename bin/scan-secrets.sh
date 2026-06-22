@@ -22,15 +22,17 @@ for f in .env config/models.json; do
 done
 if printf '%s\n' "$tracked" | grep -q '^runs/'; then flag "runs/ outputs are tracked"; else ok "runs/ not tracked"; fi
 
-# 2. key-shaped strings in tracked files (skip docs that legitimately show placeholders)
-#    Patterns: OpenAI sk-..., Anthropic sk-ant-..., generic 32+ hex/base64 after KEY=
-pat='sk-[A-Za-z0-9_-]{16,}|sk-ant-[A-Za-z0-9_-]{16,}|(API_KEY|SECRET|TOKEN)[[:space:]]*[:=][[:space:]]*["'"'"']?[A-Za-z0-9_\-]{24,}'
+# 2. key-shaped strings in tracked files. Probes are .md and users may paste a key into
+#    one, so .md IS scanned; only known-placeholder files (.env.example, *.example.*) are
+#    skipped. Patterns are case-insensitive and match any *_KEY/*_SECRET/*_TOKEN/PASSWORD
+#    var name, plus OpenAI/Anthropic sk- keys.
+pat='sk-[A-Za-z0-9_-]{16,}|sk-ant-[A-Za-z0-9_-]{16,}|[A-Za-z0-9_]*(API_?KEY|SECRET|TOKEN|PASSWORD)[[:space:]]*[:=][[:space:]]*["'"'"']?[A-Za-z0-9_\-]{24,}'
 hits=""
 while IFS= read -r f; do
   case "$f" in
-    *.example.*|.env.example|*.md) continue ;;  # placeholders allowed in examples/docs
+    *.example.*|.env.example) continue ;;  # placeholders allowed only in declared example files
   esac
-  if grep -nEq "$pat" "$f" 2>/dev/null; then hits="$hits$f\n"; fi
+  if grep -niEq "$pat" "$f" 2>/dev/null; then hits="$hits$f\n"; fi
 done <<< "$tracked"
 if [ -n "$hits" ]; then printf "%b" "$hits" | sed '/^$/d' | while read -r f; do flag "key-shaped string in $f"; done; bad=1; else ok "no key-shaped strings in tracked code"; fi
 

@@ -72,7 +72,7 @@ Rules for good rubrics:
 - Make sure `config/models.json` exists (copy `config/models.example.json`) and lists
   the candidate models + a judge model, with `key_env` names only (never paste keys).
 - Tell the user the run command:
-  `for p in probes/*; do n=$(basename "$p" .md); bin/run.sh "$n" all && bin/judge.sh "$n" all; done && bin/report.sh`
+  `for p in probes/*.md; do n=$(basename "$p" .md); bin/run.sh "$n" all && bin/judge.sh "$n" all; done && bin/report.sh`
 - Do NOT run anything that spends API tokens without the user's go-ahead. Do NOT write
   keys anywhere. Do NOT commit `runs/`, `.env`, or `config/models.json`.
 

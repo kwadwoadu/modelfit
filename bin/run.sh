@@ -39,7 +39,7 @@ strip_fences() {
 
 PROMPT_TMP="$(mktemp)"; trap 'rm -f "$PROMPT_TMP"' EXIT
 prompt_section "$PROBE_FILE" > "$PROMPT_TMP"
-[ -s "$PROMPT_TMP" ] || { echo "modelfit: probe $PROBE has an empty '# PROMPT' section" >&2; exit 1; }
+[ -n "$(tr -d '[:space:]' < "$PROMPT_TMP")" ] || { echo "modelfit: probe $PROBE has an empty or whitespace-only '# PROMPT' section" >&2; exit 1; }
 
 run_one() {
   local cfg="$1" key provider base model keyenv pin pout tparam kv
@@ -51,6 +51,15 @@ run_one() {
   pin="$(jq -r '.price_in  // 0' <<<"$cfg")"
   pout="$(jq -r '.price_out // 0' <<<"$cfg")"
   tparam="$(jq -r '.token_param // "max_tokens"' <<<"$cfg")"
+  local _f _v
+  for _f in key provider base model keyenv; do
+    _v="${!_f}"
+    [ -n "$_v" ] && [ "$_v" != "null" ] || { echo "modelfit: config error: a model entry is missing required field .$_f" >&2; return 1; }
+  done
+  case "$provider" in
+    openai|anthropic) ;;
+    *) echo "modelfit: model '$key' has invalid provider '$provider' (must be 'openai' or 'anthropic')" >&2; return 1 ;;
+  esac
   kv="${!keyenv:-}"
   local out="$ROOT/runs/$RUN_DATE/$key/$PROBE"; mkdir -p "$out"
   if [ -z "$kv" ]; then echo "[$key/$PROBE] SKIP: \$$keyenv not set (add it to .env)"; return 0; fi
@@ -72,6 +81,11 @@ run_one() {
         || { echo "[$key/$PROBE] curl failed" >&2; return 1; }
     fi
 
+    if [ ! -s "$raw" ] || ! jq -e 'type=="object"' "$raw" >/dev/null 2>&1; then
+      echo "[$key/$PROBE] non-JSON or unexpected response from $base (HTTP error page, empty body, or proxy?); first bytes:" >&2
+      head -c 200 "$raw" >&2; echo >&2
+      return 1
+    fi
     err="$(jq -r '.error.message // empty' "$raw" 2>/dev/null)"
     if [ -n "$err" ]; then echo "[$key/$PROBE] API error: $err" >&2; return 1; fi
 
