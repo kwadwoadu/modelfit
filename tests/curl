@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+set -u
+out=""
+data=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -o) shift; out="$1" ;;
+    -d) shift; data="$1" ;;
+    http*) ;;
+  esac
+  shift || true
+done
+[ -n "$out" ] || exit 2
+scenario="${MODELFIT_FAKE_SCENARIO:-success}"
+case "$scenario" in
+  http_error)
+    printf '{"error":{"message":"rate limited"}}' > "$out"
+    printf '429\t0.010'
+    exit 22
+    ;;
+  invalid_json)
+    printf '<html>bad gateway</html>' > "$out"
+    printf '502\t0.010'
+    exit 0
+    ;;
+esac
+
+if printf '%s' "$data" | grep -q 'Return ONLY the JSON verdict object'; then
+  if [ "$scenario" = "invalid_verdict" ]; then
+    printf '{"choices":[{"message":{"content":"{\\"correctness_pass\\":\\"true\\",\\"instruction_following\\":6,\\"quality\\":5,\\"criteria\\":[],\\"notes\\":\\"\\"}"},"finish_reason":"stop"}],"usage":{"prompt_tokens":11,"completion_tokens":7}}' > "$out"
+  else
+    printf '{"choices":[{"message":{"content":"{\\"correctness_pass\\":true,\\"instruction_following\\":5,\\"quality\\":4,\\"criteria\\":[{\\"id\\":\\"M1\\",\\"met\\":true,\\"why\\":\\"ok\\"},{\\"id\\":\\"M2\\",\\"met\\":true,\\"why\\":\\"ok\\"},{\\"id\\":\\"M3\\",\\"met\\":true,\\"why\\":\\"ok\\"},{\\"id\\":\\"M4\\",\\"met\\":true,\\"why\\":\\"ok\\"},{\\"id\\":\\"M5\\",\\"met\\":true,\\"why\\":\\"ok\\"}],\\"notes\\":\\"passes\\"}"},"finish_reason":"stop"}],"usage":{"prompt_tokens":11,"completion_tokens":7}}' > "$out"
+  fi
+else
+  printf '{"choices":[{"message":{"content":"function chunk<T>(arr: T[], size: number): T[][] { if (!Number.isInteger(size) || size <= 0) throw new RangeError(\\"size must be positive\\"); const out: T[][] = []; for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size)); return out; }"},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":20}}' > "$out"
+fi
+printf '200\t0.010'

@@ -1,0 +1,18 @@
+# Secrets and machine-specific config -- NEVER commit
+.env
+.env.*
+!.env.example
+config/models.json
+*.local.sh
+lib/keys.local.sh
+
+# Run outputs (can contain large or sensitive model answers)
+runs/
+
+# Live results are per-user run data; ship results.example.csv instead
+results.csv
+
+# Junk
+.DS_Store
+*.tmp
+*.log

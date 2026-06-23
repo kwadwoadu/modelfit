@@ -1,0 +1,60 @@
+{
+  "_comment": "Copy to config/models.json (gitignored) and edit. Keys are NEVER stored here -- only the NAME of the env var that holds each key (key_env). Verify every model_id, base_url, price_in and price_out against the provider's own docs before trusting the numbers; the prices below are EXAMPLES, not verified.",
+
+  "judge": {
+    "provider": "anthropic",
+    "base_url": "https://api.anthropic.com",
+    "model_id": "claude-opus-4-8",
+    "key_env": "ANTHROPIC_API_KEY",
+    "token_param": "max_tokens"
+  },
+
+  "models": [
+    {
+      "key": "deepseek",
+      "provider": "anthropic",
+      "base_url": "https://api.deepseek.com/anthropic",
+      "model_id": "deepseek-v4-pro",
+      "key_env": "DEEPSEEK_API_KEY",
+      "price_in": 0.28,
+      "price_out": 0.87
+    },
+    {
+      "key": "kimi",
+      "provider": "anthropic",
+      "base_url": "https://api.moonshot.ai/anthropic",
+      "model_id": "kimi-k2.6",
+      "key_env": "MOONSHOT_API_KEY",
+      "price_in": 0.60,
+      "price_out": 2.50
+    },
+    {
+      "key": "glm",
+      "provider": "anthropic",
+      "base_url": "https://api.z.ai/api/anthropic",
+      "model_id": "glm-5.2",
+      "key_env": "ZAI_API_KEY",
+      "price_in": 0.60,
+      "price_out": 2.20
+    },
+    {
+      "key": "gpt-mini",
+      "provider": "openai",
+      "base_url": "https://api.openai.com/v1",
+      "model_id": "gpt-5-mini",
+      "key_env": "OPENAI_API_KEY",
+      "token_param": "max_completion_tokens",
+      "price_in": 0.25,
+      "price_out": 2.00
+    },
+    {
+      "key": "openrouter-llama",
+      "provider": "openai",
+      "base_url": "https://openrouter.ai/api/v1",
+      "model_id": "meta-llama/llama-3.3-70b-instruct",
+      "key_env": "OPENROUTER_API_KEY",
+      "price_in": 0.13,
+      "price_out": 0.40
+    }
+  ]
+}
