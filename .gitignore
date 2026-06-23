@@ -12,6 +12,10 @@ runs/
 # Live results are per-user run data; ship results.example.csv instead
 results.csv
 
+# Demo render scratch (demo/demo.tape cleans these up; ignored in case a render is interrupted)
+.demo-runs/
+.demo-results.csv
+
 # Junk
 .DS_Store
 *.tmp
