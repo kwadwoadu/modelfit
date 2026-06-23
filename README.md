@@ -2,9 +2,7 @@
 
 **Find the best LLM for your codebase—not someone else’s benchmark.**
 
-![ModelFit running a probe across two models, blind-judging the answers, and ranking them](demo/demo.gif)
-
-> Demo above runs offline against a built-in mock provider (no keys, no network). Reproduce it with `vhs demo/demo.tape` — see [`demo/`](demo/).
+![ModelFit running a probe across candidate models, blind-judging, and ranking them](assets/demo.gif)
 
 ModelFit runs repo-specific coding probes across candidate models, grades their answers blindly against explicit rubrics, and ranks correctness before cost and latency. Public benchmarks measure average code; ModelFit asks whether a cheaper or secondary model can handle *your* SwiftUI, *your* Drizzle migrations, *your* Cloudflare Worker, and *your* failure modes.
 

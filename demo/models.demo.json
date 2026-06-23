@@ -1,8 +1,0 @@
-{
-  "_comment": "Demo-only config for the offline GIF. All entries point at the built-in mock provider (tests/curl): no keys, no network. Real runs use config/models.json with real providers.",
-  "judge":  {"provider":"openai","base_url":"https://fake.test","model_id":"fake-judge","key_env":"DEMO_KEY","token_param":"max_tokens"},
-  "models": [
-    {"key":"model-a","provider":"openai","base_url":"https://fake.test","model_id":"fake-a","key_env":"DEMO_KEY","token_param":"max_tokens","price_in":0.30,"price_out":1.20},
-    {"key":"model-b","provider":"openai","base_url":"https://fake.test","model_id":"fake-b","key_env":"DEMO_KEY","token_param":"max_tokens","price_in":0.60,"price_out":2.50}
-  ]
-}
