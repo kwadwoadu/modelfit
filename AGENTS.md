@@ -6,6 +6,8 @@ back up or replace a primary coding model. Public benchmarks rank average code; 
 ranks correctness on the user's actual work.
 
 ## Your job in this repo
+**You benchmark a *separate* target repo the user names, never ModelFit itself.**
+
 When a user opens ModelFit and asks to benchmark models on their codebase:
 
 1. **Generate probes from their target repo.** Read `prompts/generate-probes.md` and follow
@@ -15,6 +17,7 @@ When a user opens ModelFit and asks to benchmark models on their codebase:
    thing a weaker model gets wrong. Show the user the probe list before running anything.
 2. **Run the pipeline** (only after the user confirms; this spends API tokens):
    ```bash
+   ./bin/modelfit selftest                        # zero API spend; validate plumbing first
    ./bin/modelfit doctor --repo ../their-app      # check config, keys, providers
    for p in probes/*.md; do
      n=$(basename "$p" .md)
@@ -44,7 +47,7 @@ Full CLI: `./bin/modelfit <doctor|run|judge|report|selftest|scan-secrets>`.
 - **Confirm before spending tokens.** `run` and `judge` call paid model APIs.
 - **Generated probes may contain proprietary code, customer data, or secrets** copied from the
   target repo. Surface this and let the user review the probes before they are run or committed.
-- Run `./bin/scan-secrets.sh` before suggesting any `git push`.
+- Run `./bin/modelfit scan-secrets` before suggesting any `git push`.
 
 ## Where things live
 - `prompts/generate-probes.md` - the probe generator you follow in step 1.
