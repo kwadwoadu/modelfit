@@ -5,5 +5,7 @@ export PATH="$_root/tests:$PATH"            # tests/curl shadows real curl with 
 export DEMO_KEY=demo
 export MODELFIT_CONFIG="$_root/demo/models.demo.json"
 export MODELFIT_RUN_ID=demo
-export MODELFIT_RUNS_DIR="$_root/.demo-runs"
-export MODELFIT_RESULTS_CSV="$_root/.demo-results.csv"
+# Relative paths keep the demo output clean (no absolute machine path on screen).
+# Run the tape from the repo root; .demo-runs / .demo-results.csv are gitignored.
+export MODELFIT_RUNS_DIR=".demo-runs"
+export MODELFIT_RESULTS_CSV=".demo-results.csv"
