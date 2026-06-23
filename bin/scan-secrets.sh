@@ -5,7 +5,7 @@
 # in tracked files, (3) runs/ outputs are not tracked.
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$ROOT"
+cd "$ROOT" || exit 1
 bad=0
 flag(){ echo "  LEAK $1"; bad=1; }
 ok(){ echo "  ok   $1"; }

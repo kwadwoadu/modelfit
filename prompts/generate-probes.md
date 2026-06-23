@@ -1,82 +1,76 @@
-# Generate modelfit probes from THIS repository
+# Generate ModelFit probes from a TARGET repository
 
-You are running inside a user's codebase. Your job: turn how *they* actually work
-into a small set of **probes** that will reveal which LLM can back up or replace
-their main coding model. Generic benchmarks measure average code. modelfit measures
-*their* stack, *their* conventions, *their* failure modes.
+You are running inside the ModelFit repository. Your job is to turn a separate target codebase into 6–10 sharp probes.
 
-A probe is one self-contained `.md` file in `probes/` with two sections: a `# PROMPT`
-sent verbatim to each candidate model, and a `# RUBRIC` an automated judge grades
-against. The whole point is that the rubric encodes a **single decisive
-discriminator** -- the thing a weaker model gets subtly wrong -- not a vague "is it
-good".
+Target selection is mandatory:
+- Prefer the slash command form: `/modelfit --repo <path-to-target-repo>`.
+- If this prompt is pasted manually, read `MODELFIT_TARGET_REPO` or ask for the target path.
+- Resolve the target path before reading. If it resolves to the ModelFit repository itself, stop unless the user explicitly says they want to benchmark ModelFit.
 
-## Step 1 -- Understand this repo (read, do not assume)
-- Detect the languages, frameworks, and the 2-3 libraries that show up most
-  (e.g. SwiftUI + Drizzle/Postgres, Next.js App Router, Cloudflare Workers, Rust + axum).
-- Find the conventions a newcomer would get wrong: naming (camelCase vs snake_case
-  mapping, file layout), error-handling style, how migrations/tests/imports are done,
-  any house rules in CLAUDE.md / CONTRIBUTING / lint config.
-- Note the recurring *task shapes* in git history and TODOs: "add a field across
-  layers", "fix a crash from a stack trace", "write an ORM query", "a small surgical
-  edit to one function". These become probes.
+A probe is one self-contained `.md` file in ModelFit’s `probes/` directory with two sections: `# PROMPT` and `# RUBRIC`. The prompt is sent verbatim to candidate models; the rubric is used by the judge.
 
-## Step 2 -- Choose 6 to 10 probes across these axes
-Aim for coverage, not volume (small enough that they will actually re-run it):
-1. **Surgical edit** -- change one function minimally, do not restructure the file.
-2. **Cross-layer consistency** -- wire one field/feature through every layer (schema -> migration -> API -> UI) with the naming mapping kept identical.
-3. **Idiomatic query / API call** -- the ORM/SDK call their codebase would actually write, including the trap a naive version falls into.
-4. **Debug from a trace** -- give a real stack trace + the buggy function; the discriminator is the *root cause*, not a plausible-looking nearby bug.
-5. **Constraint adherence** -- a task with 5-6 hard constraints; PASS requires all of them.
-6. **Honesty / false premise** -- embed a confident but false claim about their stack; PASS = the model refuses to play along instead of fabricating.
-7. (optional) **Taste / refactor**, **multi-file coherence**, **perf**, whatever dominates their work.
+Before writing probes, warn the user: generated probes may contain proprietary code or customer/personal data and will be sent to configured providers during a run. They must review probes before spending API tokens.
 
-## Step 3 -- Write each probe file as `probes/<short-kebab-name>.md`
-Use EXACTLY this shape:
+## Step 1 — Understand the target repo
+
+- Detect languages, frameworks and the 2–3 most important libraries.
+- Find conventions a newcomer would get wrong: naming, file layout, error handling, tests, migrations and agent instructions.
+- Look at recurring task shapes in git history and TODOs: surgical edit, cross-layer field, ORM/API call, stack-trace debug, constraint task, false-premise honesty check.
+
+## Step 2 — Choose 6 to 10 probes
+
+Cover:
+1. Surgical edit.
+2. Cross-layer consistency.
+3. Idiomatic query/API call.
+4. Debug from a trace.
+5. Constraint adherence.
+6. Honesty/false premise.
+7. Optional repo-specific discriminator.
+
+## Step 3 — Write probes
+
+Use exactly this shape:
 
 ```
 ---
-id: cross-layer-pin
-category: cross-layer-consistency
-scoring: judge          # judge = LLM-graded against the rubric; gate = self-checks via a command
+id: short-kebab-name
+category: surgical-correctness
+scoring: judge
+target_repo: <basename only>
+target_commit: <git sha or unknown>
+generated_at: <UTC timestamp>
 ---
 
 # PROMPT
-<the exact text the candidate model receives. Be specific and closed-ended.
-Demand an exact output shape so the judge can grade it. No "be helpful" filler.>
+<closed-ended task text with all context needed to grade from the answer alone>
 
 # RUBRIC
-The discriminator (one line: the subtle thing a weaker model gets wrong).
+Discriminator: <one sentence>
 
 PASS requires ALL of:
-- M1 <objective, checkable criterion>
-- M2 <...>
-- M3 <...>
+- M1 <objective criterion>
+- M2 <objective criterion>
 
-FAIL if: <the specific traps -- name them: wrong naming mapping, non-compiling code,
-hard-set instead of toggle, accepts the false premise, etc.>
+FAIL if: <specific traps>
 
-Quality pluses (do not gate, just rank): <nice-to-haves>
+Quality pluses: <nice-to-haves>
 ```
 
-Rules for good rubrics:
-- Every M-criterion must be checkable from the answer text alone (the judge sees only
-  the answer, not your repo). Bake the needed context into the PROMPT.
-- Name the failure modes explicitly. "Uses camelCase column name in SQL = FAIL" beats
-  "should be consistent".
-- Non-compiling / non-running code is always a FAIL -- say so when relevant.
-- Keep one decisive discriminator per probe. If you can't name what a weaker model
-  would get wrong, the probe is too soft -- sharpen or drop it.
+Rules:
+- Every M criterion must be checkable from the answer text alone.
+- Name failure modes explicitly.
+- Do not include secrets, full customer records or unnecessary large source dumps.
+- Keep one decisive discriminator per probe.
 
-## Step 4 -- Wire it up
-- Make sure `config/models.json` exists (copy `config/models.example.json`) and lists
-  the candidate models + a judge model, with `key_env` names only (never paste keys).
-- Tell the user the run command:
-  `for p in probes/*.md; do n=$(basename "$p" .md); bin/run.sh "$n" all && bin/judge.sh "$n" all; done && bin/report.sh`
-- Do NOT run anything that spends API tokens without the user's go-ahead. Do NOT write
-  keys anywhere. Do NOT commit `runs/`, `.env`, or `config/models.json`.
+## Step 4 — Hand back
 
-## Step 5 -- Sanity self-check before handing back
-For each probe you wrote, ask: "Could a strong model and a weak model both PASS this?"
-If yes, the discriminator is too weak -- rewrite it. The benchmark is only useful when
-the probes actually separate models.
+Show the probe list and tell the user to review sensitive content before running:
+
+```bash
+./bin/modelfit run <probe> <model-key> --samples 1
+./bin/modelfit judge <probe> <model-key>
+./bin/modelfit report
+```
+
+Do not run anything that spends provider API tokens without explicit approval.

@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cmd="${1:-}"
+[ -n "$cmd" ] || { echo "usage: modelfit <doctor|run|judge|report|selftest|scan-secrets> ..." >&2; exit 1; }
+shift
+
+case "$cmd" in
+  doctor) exec "$ROOT/bin/doctor.sh" "$@" ;;
+  run) exec "$ROOT/bin/run.sh" "$@" ;;
+  judge) exec "$ROOT/bin/judge.sh" "$@" ;;
+  report) exec "$ROOT/bin/report.sh" "$@" ;;
+  selftest) exec "$ROOT/bin/selftest.sh" "$@" ;;
+  scan-secrets) exec "$ROOT/bin/scan-secrets.sh" "$@" ;;
+  *)
+    echo "unknown modelfit command: $cmd" >&2
+    exit 1
+    ;;
+esac

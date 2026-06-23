@@ -1,47 +1,58 @@
 ---
-description: Benchmark candidate LLMs on THIS repo's real workflow and rank them
+description: Generate repo-specific ModelFit probes and run/judge them after approval
 ---
 
 # /modelfit
 
-You are driving **modelfit** inside the user's repository. Goal: find which LLM can
-back up or replace their main coding model, judged on *their* stack, not generic
-benchmarks. Pipeline: generate probes -> run candidates -> blind LLM-judge -> rank.
+Usage: `/modelfit --repo <path-to-target-repo>`
 
-## Guardrails (always)
-- NEVER write API keys into any file. Keys live only in `.env` (gitignored), referenced
-  by `key_env` names in `config/models.json`.
-- NEVER commit `runs/`, `.env`, or `config/models.json`.
-- Anything that calls a model spends tokens. Confirm with the user before a full run.
-- Run `bin/scan-secrets.sh` before suggesting any `git push`.
+You are driving **ModelFit** from this repository. Goal: benchmark candidate LLMs on a user’s actual codebase, not on ModelFit itself.
 
-## Step 0 -- setup (once)
-- If `config/models.json` is missing: `cp config/models.example.json config/models.json`,
-  then help the user list the candidate models + a judge model (edit `model_id`,
-  `base_url`, `price_in/out`; verify each against provider docs -- the examples are not verified).
-- If `.env` is missing: `cp .env.example .env` and tell the user to paste their keys there.
+## Guardrails
 
-## Step 1 -- build probes (the user picked one)
-- **Auto from this repo:** read `prompts/generate-probes.md` and follow it -- inspect the
-  codebase, then write 6-10 sharp `probes/<name>.md` files (each a `# PROMPT` + a
-  `# RUBRIC` with one decisive discriminator). Show the user the list before running.
-- **Manual:** point them at `prompts/generate-probes.md` Step 3 for the file format and
-  the two example probes (`probes/example-*.md`).
+- A target repo is required. Resolve `--repo`; if omitted, ask for it.
+- If the target resolves to this ModelFit repository, stop unless the user explicitly confirms self-benchmarking.
+- Never write API keys into tracked files. Keys live in shell env or `.env`, referenced by `key_env` in `config/models.json`.
+- Never commit `runs/`, `.env`, `config/models.json` or `results.csv`.
+- Generated probes may contain proprietary data and will be sent to model providers during a run. Tell the user to review probes before running.
+- Anything that calls configured models spends tokens. Confirm before run/judge.
+- Run `bin/scan-secrets.sh` before suggesting any push.
 
-## Step 2 -- run + judge (after the user confirms)
+## Step 0 — setup
+
+If needed:
+
+```bash
+cp config/models.example.json config/models.json
+cp .env.example .env
+./bin/modelfit doctor --repo <target>
+```
+
+## Step 1 — build probes
+
+Read `prompts/generate-probes.md` and follow it against the resolved target repo. Write 6–10 probes into this repository’s `probes/` directory. Show the list before any model run.
+
+## Step 2 — run + judge after approval
+
+Smoke first:
+
+```bash
+./bin/modelfit run <probe> <model-key> --samples 1
+./bin/modelfit judge <probe> <model-key>
+./bin/modelfit report
+```
+
+Full run:
+
 ```bash
 for p in probes/*.md; do
   n=$(basename "$p" .md)
-  bin/run.sh   "$n" all     # POST the probe to every model, auto-escalate token cap
-  bin/judge.sh "$n" all     # blind LLM-judge each answer against the rubric -> results.csv
+  ./bin/modelfit run "$n" all --samples 1
+  ./bin/modelfit judge "$n" all
 done
-bin/report.sh               # ranked leaderboard
+./bin/modelfit report
 ```
-Run a single probe/model while iterating: `bin/run.sh <probe> <model-key>`.
 
-## Step 3 -- read the result
-- Summarize `bin/report.sh` for the user: who passed, the cost/latency trade-off, and
-  the one or two probes that actually separated the models (those are the decisions).
-- Remind them correctness beats cost/latency: a cheap model that ships non-compiling code
-  is not a backup.
-- Offer to write a shareable summary (see `examples/REPORT-*.md` for the shape).
+## Step 3 — summarize
+
+Report who passed, coverage gaps, incomplete attempts, candidate cost, judge cost and the probes that separated models. Remind the user that correctness beats cost/latency.

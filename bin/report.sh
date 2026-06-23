@@ -1,45 +1,120 @@
 #!/usr/bin/env bash
-# modelfit -- report.sh [results.csv]
-# Render results.csv into a ranked markdown leaderboard.
-# Rank: objective pass% desc, then mean quality desc, then total cost asc.
-# Cost/latency never override a correctness loss.
+# modelfit -- report.sh [--run-id ID] [--strict] [legacy-results.csv]
 set -uo pipefail
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CSV="${1:-$ROOT/results.csv}"
-[ -f "$CSV" ] || { echo "modelfit: no results.csv at $CSV" >&2; exit 1; }
 
-# cols: 1 date 2 model 3 probe 4 cat 5 pass 6 instr 7 quality
-#       8 cost 9 lat 10 in 11 out 12 trunc 13 judge 14 notes
-awk -F, '
-NR==1 { next }
-$2!="" {
-  m=$2; runs[m]++; models[m]=1
-  if ($5=="true")  { pass[m]++; obj[m]++ }
-  else if ($5=="false") { obj[m]++ }
-  if ($6!="" && $6!="NA") { fi[m]+=$6; fin[m]++ }
-  if ($7!="" && $7!="NA") { q[m]+=$7; qn[m]++ }
-  if ($8!="" && $8!="NA") { c[m]+=$8 }
-  if ($9!="" && $9!="NA") { l[m]+=$9; ln[m]++ }
-}
-END {
-  for (m in models) {
-    pr  = (obj[m]>0) ? pass[m]/obj[m]*100 : 0
-    afi = (fin[m]>0) ? fi[m]/fin[m] : 0
-    aq  = (qn[m]>0)  ? q[m]/qn[m]   : 0
-    al  = (ln[m]>0)  ? l[m]/ln[m]   : 0
-    printf "%s\t%.0f\t%.2f\t%.2f\t%.4f\t%.1f\t%d\n", m, pr, afi, aq, c[m]+0, al, runs[m]
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=bin/lib/common.sh
+. "$ROOT/bin/lib/common.sh"
+
+STRICT=0
+RUN_ID=""
+LEGACY=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --run-id) shift; RUN_ID="${1:-}" ;;
+    --strict) STRICT=1 ;;
+    *.csv) LEGACY="$1" ;;
+    *) LEGACY="$1" ;;
+  esac
+  shift
+done
+
+legacy_report() {
+  local csv="$1"
+  [ -f "$csv" ] || die "no results.csv at $csv"
+  awk -F, '
+  NR==1 { next }
+  $2!="" {
+    m=$2; gsub(/^"|"$/, "", m); runs[m]++; models[m]=1
+    p=$5; gsub(/^"|"$/, "", p)
+    if (p=="true") { pass[m]++; obj[m]++ } else if (p=="false") { obj[m]++ }
+    qv=$7; gsub(/^"|"$/, "", qv); if (qv!="" && qv!="NA") { q[m]+=qv; qn[m]++ }
+    cv=$8; gsub(/^"|"$/, "", cv); if (cv!="" && cv!="NA") { c[m]+=cv }
+    lv=$9; gsub(/^"|"$/, "", lv); if (lv!="" && lv!="NA") { l[m]+=lv; ln[m]++ }
   }
-}' "$CSV" \
-| sort -t"$(printf '\t')" -k2,2nr -k4,4nr -k5,5n \
-| awk -F"$(printf '\t')" '
-BEGIN {
-  print "# modelfit leaderboard"; print ""
-  print "| Rank | Model | Pass % | Instr (0-5) | Quality (0-5) | Total cost $ | Avg latency s | Runs |"
-  print "|------|-------|--------|-------------|---------------|--------------|---------------|------|"
+  END {
+    print "# modelfit leaderboard"; print ""
+    print "| Rank | Model | Pass % | Quality (0-5) | Candidate cost $ | Avg latency s | Runs |"
+    print "|------|-------|--------|---------------|------------------|---------------|------|"
+    for (m in models) {
+      pr=(obj[m]>0)?pass[m]/obj[m]*100:0; aq=(qn[m]>0)?q[m]/qn[m]:0; al=(ln[m]>0)?l[m]/ln[m]:0
+      printf "%s\t%.0f\t%.2f\t%.4f\t%.1f\t%d\n", m, pr, aq, c[m]+0, al, runs[m]
+    }
+  }' "$csv" | sort -t"$(printf '\t')" -k2,2nr -k3,3nr -k4,4n |
+  awk -F"$(printf '\t')" 'NR<=4{print;next}{printf "| %d | %s | %s%% | %s | %s | %s | %s |\n", NR-4, $1,$2,$3,$4,$5,$6}'
 }
-{ printf "| %d | %s | %s%% | %s | %s | %s | %s | %s |\n", NR, $1, $2, $3, $4, $5, $6, $7 }
+
+if [ -n "$LEGACY" ]; then
+  legacy_report "$LEGACY"
+  exit 0
+fi
+
+[ -n "$RUN_ID" ] || RUN_ID="$(latest_run_id)" || die "no runs found"
+RUN_DIR="$MODELFIT_RUNS_DIR/$RUN_ID"
+[ -d "$RUN_DIR" ] || die "no run at runs/$RUN_ID"
+VERDICTS="$RUN_DIR/verdicts.csv"
+ATTEMPTS="$RUN_DIR/attempts.csv"
+[ -f "$VERDICTS" ] || die "no verdicts.csv for $RUN_ID"
+
+tmp="$(mktemp)"
+trap 'rm -f "$tmp"' EXIT
+
+awk -F, '
+function clean(x){gsub(/^"|"$/, "", x); gsub(/""/, "\"", x); return x}
+NR==1{next}
+{
+  m=clean($3); models[m]=1; judged[m]++
+  passv=clean($6); if(passv=="true") pass[m]++
+  qv=clean($8); if(qv!="NA" && qv!=""){quality[m]+=qv; qn[m]++}
+  cv=clean($9); if(cv!="NA" && cv!=""){candidate_cost[m]+=cv}
+  lv=clean($10); if(lv!="NA" && lv!=""){lat[m]+=lv; ln[m]++}
+}
 END {
-  print ""
-  print "Rank: pass% desc, then quality desc, then cost asc. Cost/latency never override a correctness loss."
-  print "Treat gaps inside run-to-run variance as ties -- raise MODELFIT_SAMPLES and re-run to be sure."
-}'
+  for(m in models){
+    pr=(judged[m]>0)?pass[m]/judged[m]*100:0
+    q=(qn[m]>0)?quality[m]/qn[m]:0
+    l=(ln[m]>0)?lat[m]/ln[m]:0
+    printf "%s\t%d\t%.0f\t%.2f\t%.6f\t%.2f\n", m, judged[m], pr, q, candidate_cost[m]+0, l
+  }
+}' "$VERDICTS" > "$tmp"
+
+attempts_tmp="$(mktemp)"
+trap 'rm -f "$tmp" "$attempts_tmp"' EXIT
+if [ -f "$ATTEMPTS" ]; then
+  awk -F, '
+  function clean(x){gsub(/^"|"$/, "", x); return x}
+  NR==1{next}
+  {
+    m=clean($4); st=clean($3); out=clean($10); cost=clean($15)
+    if(cost=="NA" || cost=="") cost=0
+    total[m]+=cost; attempts[m]++
+    if(st=="judge") judge[m]+=cost
+    if(out!="success") incomplete[m]++
+    models[m]=1
+  }
+  END{for(m in models) printf "%s\t%.6f\t%.6f\t%d\t%d\n", m, judge[m]+0, total[m]+0, attempts[m]+0, incomplete[m]+0}
+  ' "$ATTEMPTS" > "$attempts_tmp"
+fi
+
+echo "# modelfit leaderboard"
+echo ""
+echo "Run: $RUN_ID"
+echo ""
+echo "| Rank | Model | Judged | Pass % | Quality (0-5) | Candidate $ | Judge $ | Actual total $ | Avg latency s | Attempts | Incomplete attempts |"
+echo "|------|-------|--------|--------|---------------|-------------|---------|----------------|---------------|----------|---------------------|"
+sort -t"$(printf '\t')" -k3,3nr -k4,4nr -k5,5n "$tmp" |
+awk -F"$(printf '\t')" -v OFS="$(printf '\t')" '{print NR,$0}' |
+while IFS="$(printf '\t')" read -r rank model judged passpct q cand latavg; do
+  line="$(awk -F'\t' -v m="$model" '$1==m{print; exit}' "$attempts_tmp")"
+  jc="$(printf '%s' "$line" | awk -F'\t' '{print $2}')"; [ -n "$jc" ] || jc="0.000000"
+  tc="$(printf '%s' "$line" | awk -F'\t' '{print $3}')"; [ -n "$tc" ] || tc="$cand"
+  at="$(printf '%s' "$line" | awk -F'\t' '{print $4}')"; [ -n "$at" ] || at="0"
+  inc="$(printf '%s' "$line" | awk -F'\t' '{print $5}')"; [ -n "$inc" ] || inc="0"
+  printf '| %s | %s | %s | %s%% | %s | %.6f | %s | %s | %s | %s | %s |\n' "$rank" "$model" "$judged" "$passpct" "$q" "$cand" "$jc" "$tc" "$latavg" "$at" "$inc"
+done
+echo ""
+echo "Rank: pass% desc, then quality desc, then candidate cost asc. Actual total includes recorded candidate and judge attempts when provider usage is available."
+
+if [ "$STRICT" -eq 1 ] && find "$RUN_DIR" -name status.json -exec jq -e '.status=="success"' {} + >/dev/null 2>&1; then
+  :
+fi

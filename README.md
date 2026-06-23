@@ -1,91 +1,110 @@
-# modelfit
+# ModelFit
 
-**Stop guessing which LLM can back up your main coding model. Test it on YOUR actual work.**
+**Find the best LLM for your codebase—not someone else’s benchmark.**
 
-Public benchmarks rank *average* code. They don't tell you whether a cheap model can
-write *your* SwiftUI, *your* Drizzle migrations, *your* Cloudflare Worker, the way your
-codebase actually does it. modelfit is a tiny, bring-your-own-workflow harness: you turn
-how you work into a handful of sharp **probes**, fire them at any set of models, and an
-automated **judge** ranks them, blind, on correctness first and cost second.
-
-It started as a private suite one engineer used to pick a backup for Claude Code Opus.
-This is the shareable, any-model version.
+ModelFit runs repo-specific coding probes across candidate models, grades their answers blindly against explicit rubrics, and ranks correctness before cost and latency. Public benchmarks measure average code; ModelFit asks whether a cheaper or secondary model can handle *your* SwiftUI, *your* Drizzle migrations, *your* Cloudflare Worker, and *your* failure modes.
 
 ```
-your repo ──▶ probes (PROMPT + RUBRIC) ──▶ run.sh ──▶ each model answers
-                                                          │
-                          results.csv ◀── judge.sh ◀──────┘  (blind LLM-judge vs the rubric)
-                               │
-                          report.sh ──▶ ranked leaderboard
+target repo ──▶ probes (PROMPT + RUBRIC) ──▶ run.sh ──▶ candidate answers
+                                                              │
+        attempts.csv + verdicts.csv ◀── judge.sh ◀────────────┘
+                    │
+                report.sh ──▶ coverage-aware leaderboard
 ```
 
-## Why it's different
-- **Your workflow, not a generic suite.** Probes are generated from *your* repo (or written by hand).
-- **Any model.** OpenAI-compatible (`/chat/completions`: OpenAI, Gemini, Llama, Mistral, all of OpenRouter) and Anthropic-compatible (`/v1/messages`: Claude, DeepSeek, Kimi, GLM).
-- **Automated, blind grading.** An LLM-judge scores each answer against a rubric and never sees which model wrote it.
-- **Correctness over vibes.** Non-compiling code fails no matter how cheap or fast. Cost/latency never override a correctness loss.
+## Why it is different
 
-## Security (read this)
-This repo is meant to be shared publicly. It is built so you can't leak a key by accident:
-- **No keys in the repo, ever.** `config/models.json` stores only the *name* of the env var that holds each key (`key_env`). The actual keys live in `.env`, which is gitignored.
-- `.env`, `config/models.json`, and `runs/` (model outputs) are all gitignored.
-- `bin/scan-secrets.sh` refuses to bless a repo where anything secret-shaped is tracked. Run it before every push.
+- **Your workflow, not a generic suite.** Probes are generated from a target repo you name explicitly.
+- **Any compatible model.** OpenAI-compatible `/chat/completions` and Anthropic-compatible `/v1/messages` endpoints.
+- **Blind rubric grading.** The judge sees the task, rubric and answer, not the candidate model name.
+- **Correctness first.** Cost and latency never rescue a correctness loss.
+- **Auditable runs.** Every run gets an immutable run ID, per-sample outputs, attempt ledger and verdict ledger.
+
+## Security and data boundary
+
+ModelFit is designed so secrets and run outputs are excluded from Git by default, but no local tool can guarantee you will never leak sensitive data.
+
+- `config/models.json` stores only the environment variable names that hold keys. The real keys live in your shell or `.env`, which is gitignored.
+- `.env`, `config/models.json`, `runs/` and `results.csv` are ignored.
+- `bin/scan-secrets.sh` checks tracked files for common secret-shaped strings before publishing.
+- Generated probes may contain proprietary code, customer data, credentials or personal data. Review probes before running them.
+- Probe prompts are sent to each configured candidate provider. Task, rubric and candidate answer are sent to the judge provider.
 
 ## Quickstart
+
 ```bash
-git clone <this-repo> && cd modelfit
-brew install jq          # the only dependency besides curl + bash
+git clone https://github.com/kwadwoadu/modelfit.git
+cd modelfit
+brew install jq shellcheck   # shellcheck optional, used by CI/self-review
 
-./bin/selftest.sh        # proves the plumbing with ZERO API spend
+./bin/selftest.sh            # zero API spend; includes mock-provider tests
 
-cp config/models.example.json config/models.json   # edit: your models + a judge
-cp .env.example .env                                # paste your API keys here (gitignored)
-
-# run the two example probes across your models, judge them, rank:
-for p in probes/*.md; do n=$(basename "$p" .md); ./bin/run.sh "$n" all && ./bin/judge.sh "$n" all; done
-./bin/report.sh
+cp config/models.example.json config/models.json   # edit models + judge
+cp .env.example .env                                # paste keys; never commit
+./bin/modelfit doctor --repo ../your-app
 ```
 
-## Add YOUR workflow (two ways)
-1. **Let your Claude Code build them.** Open this repo in Claude Code (or paste
-   `prompts/generate-probes.md`) and say *"generate modelfit probes from this repo."* It
-   reads your codebase and writes 6-10 probes tuned to your stack and conventions. With
-   the bundled slash-command, just run `/modelfit`.
-2. **Write them by hand.** Copy the shape of `probes/example-*.md`: a `# PROMPT` (sent
-   verbatim to each model) and a `# RUBRIC` (PASS criteria the judge grades against). The
-   rule of thumb: each probe should encode one *decisive discriminator* -- the subtle
-   thing a weaker model gets wrong.
+Generate probes with Claude Code from the ModelFit repo:
+
+```text
+/modelfit --repo ../your-app
+```
+
+Then smoke-test one probe/model before the full suite:
+
+```bash
+./bin/modelfit run example-chunk fake-model-key --samples 1
+./bin/modelfit judge example-chunk fake-model-key
+./bin/modelfit report
+```
+
+Full run:
+
+```bash
+for p in probes/*.md; do
+  n=$(basename "$p" .md)
+  ./bin/modelfit run "$n" all --samples 1
+  ./bin/modelfit judge "$n" all
+done
+./bin/modelfit report
+```
+
+If one model fails, the batch continues where possible but exits non-zero and the report shows incomplete coverage.
+
+## Add your workflow
+
+1. **Agent-generated probes.** Run `/modelfit --repo ../your-app`. The command inspects the target repository, writes 6–10 probes into `probes/`, and records non-sensitive provenance.
+2. **Manual probes.** Copy `probes/example-*.md`: a `# PROMPT` sent to each model and a `# RUBRIC` the judge grades against.
+
+A good probe has one decisive discriminator: the subtle thing a weaker model gets wrong.
 
 ## How scoring works
-- `run.sh` POSTs each probe to every model, strips markdown fences, and on an empty or
-  truncated reply **auto-escalates the token cap** (`MODELFIT_MAX_TOKENS` -> ceiling) so a
-  reasoning-heavy model can't silently return nothing.
-- `judge.sh` sends the task + rubric + the answer (author hidden) to the judge model and
-  parses a strict JSON verdict (`correctness_pass`, `instruction_following` 0-5,
-  `quality` 0-5, per-criterion reasoning, notes). The pass/score/notes summary is the
-  row appended to `results.csv`.
-- `report.sh` ranks by **pass% desc, then quality desc, then cost asc.** Cost and latency
-  never rescue a correctness failure.
-- Cost is `tokens x price` from `config/models.json`. **Verify those prices** against each
-  provider -- the examples shipped are placeholders, not confirmed.
+
+- `run.sh` sends each probe to candidates, strips markdown fences, retries empty/truncated replies up to the token ceiling, and records every attempt in `runs/<run-id>/attempts.csv`.
+- `judge.sh` sends task + rubric + untrusted candidate answer to the judge, validates strict JSON verdicts, and writes `runs/<run-id>/verdicts.csv`.
+- `report.sh` ranks by pass percentage, quality and candidate cost, while showing judged count, attempts, incomplete attempts and actual recorded total cost.
+- Candidate cost, judge cost and retry cost are tracked from provider token usage when available. Missing usage is `NA`, not zero.
+
+## Limitations
+
+- LLM judges are useful but not objective. Blind labels reduce model-identity bias; they do not remove style bias or prompt-injection risk.
+- Judge-only probes do not execute candidate code. If compilation is decisive, add an executable gate in a future probe.
+- Prices in `config/models.example.json` are placeholders. Verify provider pricing before trusting cost comparisons.
+- One sample is not statistical confidence. Use `--samples N` when run-to-run variance matters.
+- Provider “compatibility” varies. Use `./bin/modelfit doctor` and a smoke probe before a large run.
 
 ## Layout
+
 ```
 modelfit/
-├─ bin/    run.sh  judge.sh  report.sh  selftest.sh  scan-secrets.sh
-├─ config/ models.example.json        # copy to models.json (gitignored)
-├─ probes/ example-honesty.md  example-chunk.md
-├─ prompts/ generate-probes.md  judge-system.md
-├─ .claude/commands/modelfit.md       # the /modelfit slash-command
-├─ examples/                          # a real, shareable run write-up
-├─ results.example.csv  .env.example  .gitignore  LICENSE
+├─ bin/    modelfit run.sh judge.sh report.sh doctor.sh selftest.sh scan-secrets.sh
+├─ bin/lib/common.sh
+├─ config/ models.example.json
+├─ probes/ example-honesty.md example-chunk.md
+├─ prompts/ generate-probes.md judge-system.md
+├─ tests/ mock-provider reliability tests
+├─ .claude/commands/modelfit.md
+├─ examples/ results.example.csv .env.example .gitignore LICENSE
 ```
-
-## Good probes, briefly
-A probe is useful only if a strong model and a weak model would score *differently* on
-it. Cover a spread: a surgical one-function edit, a field wired through every layer, an
-idiomatic ORM/SDK call (with the trap a naive version hits), a debug-from-stack-trace
-where the discriminator is the *root cause*, a multi-constraint task, and an honesty /
-false-premise check. Keep it to ~6-10 so you'll actually re-run it when a new model drops.
 
 MIT licensed. Built by Kwadwo Adu.
