@@ -37,7 +37,7 @@ ModelFit is designed so secrets and run outputs are excluded from Git by default
 ```bash
 git clone https://github.com/kwadwoadu/modelfit.git
 cd modelfit
-brew install jq shellcheck   # shellcheck optional, used by CI/self-review
+brew install jq shellcheck   # shellcheck optional, for local linting
 
 ./bin/selftest.sh            # zero API spend; includes mock-provider tests
 
