@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# No secrets, no untrusted input (no github.event.* interpolation): static commands only.
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Versions (jq + shellcheck are preinstalled on ubuntu-latest)
+        run: |
+          jq --version
+          shellcheck --version | sed -n '1,2p'
+
+      - name: Make scripts executable
+        run: chmod +x bin/*.sh bin/modelfit bin/lib/*.sh tests/curl
+
+      - name: selftest (zero API spend, runs against the mock provider)
+        run: ./bin/selftest.sh
+
+      - name: shellcheck (catches word-splitting / SC2086 etc.)
+        run: shellcheck bin/run.sh bin/judge.sh bin/report.sh bin/doctor.sh bin/selftest.sh bin/scan-secrets.sh bin/modelfit bin/lib/common.sh tests/curl tests/reliability.test.sh
