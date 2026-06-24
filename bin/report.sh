@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# modelfit -- report.sh [--run-id ID] [--strict] [legacy-results.csv]
+# modelfit -- report.sh [--run-id ID] [--by-task] [--strict] [legacy-results.csv]
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -9,9 +9,11 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STRICT=0
 RUN_ID=""
 LEGACY=""
+BYTASK=0
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --run-id) shift; RUN_ID="${1:-}" ;;
+    --by-task) BYTASK=1 ;;
     --strict) STRICT=1 ;;
     *.csv) LEGACY="$1" ;;
     *) LEGACY="$1" ;;
@@ -44,8 +46,33 @@ legacy_report() {
   awk -F"$(printf '\t')" 'NR<=4{print;next}{printf "| %d | %s | %s%% | %s | %s | %s | %s |\n", NR-4, $1,$2,$3,$4,$5,$6}'
 }
 
+bytask_report() {
+  # Per-task candidate cost (USD), pivoted: rows = probes, columns = models.
+  # Reads verdicts.csv (model = col 3, probe = col 4, cost_usd = col 9).
+  local verdicts="$1" models m p v agg
+  models="$(awk -F, 'NR>1{x=$3; gsub(/^"|"$/,"",x); if(x!="")print x}' "$verdicts" | sort -u | tr '\n' ' ')"
+  agg="$(mktemp)"
+  awk -F, 'function c(x){gsub(/^"|"$/,"",x); gsub(/""/,"\"",x); return x}
+           NR>1{ k=c($4)"|"c($3); val=c($9); if(val=="NA"||val=="")val=0; cost[k]+=val }
+           END{ for(k in cost) printf "%s %.6f\n", k, cost[k] }' "$verdicts" > "$agg"
+  echo "Cost per task (USD, candidate cost)"
+  echo ""
+  printf '| Probe |'; for m in $models; do printf ' %s |' "$m"; done; echo
+  printf '%s' '|---|'; for m in $models; do printf '%s' '---|'; done; echo
+  awk -F, 'NR>1{x=$4; gsub(/^"|"$/,"",x); if(x!="")print x}' "$verdicts" | sort -u | while IFS= read -r p; do
+    printf '| %s |' "$p"
+    for m in $models; do
+      v="$(awk -v k="$p|$m" '$1==k{print $2; f=1} END{if(!f)print "-"}' "$agg")"
+      printf ' %s |' "$v"
+    done
+    echo
+  done
+  rm -f "$agg"
+}
+
 if [ -n "$LEGACY" ]; then
   legacy_report "$LEGACY"
+  [ "$BYTASK" -eq 1 ] && echo "(--by-task needs a run directory; ignored for a legacy CSV)" >&2
   exit 0
 fi
 
@@ -114,6 +141,11 @@ while IFS="$(printf '\t')" read -r rank model judged passpct q cand latavg; do
 done
 echo ""
 echo "Rank: pass% desc, then quality desc, then candidate cost asc. Actual total includes recorded candidate and judge attempts when provider usage is available."
+
+if [ "$BYTASK" -eq 1 ]; then
+  echo ""
+  bytask_report "$VERDICTS"
+fi
 
 if [ "$STRICT" -eq 1 ] && find "$RUN_DIR" -name status.json -exec jq -e '.status=="success"' {} + >/dev/null 2>&1; then
   :
