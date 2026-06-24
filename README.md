@@ -84,7 +84,7 @@ A good probe has one decisive discriminator: the subtle thing a weaker model get
 
 - `run.sh` sends each probe to candidates, strips markdown fences, retries empty/truncated replies up to the token ceiling, and records every attempt in `runs/<run-id>/attempts.csv`.
 - `judge.sh` sends task + rubric + untrusted candidate answer to the judge, validates strict JSON verdicts, and writes `runs/<run-id>/verdicts.csv`.
-- `report.sh` ranks by pass percentage, quality and candidate cost, while showing judged count, attempts, incomplete attempts and actual recorded total cost. Add `--by-task` for a per-probe cost breakdown (which kinds of task are expensive on which model).
+- `report.sh` ranks by pass percentage, quality and candidate cost, while showing judged count, attempts, incomplete attempts and actual recorded total cost. Add `--by-task` for a per-probe candidate-cost breakdown (which kinds of task are expensive on which model).
 - Candidate cost, judge cost and retry cost are tracked from provider token usage when available. Missing usage is `NA`, not zero.
 
 ## Limitations
