@@ -49,25 +49,30 @@ legacy_report() {
 bytask_report() {
   # Per-task candidate cost (USD), pivoted: rows = probes, columns = models.
   # Reads verdicts.csv (model = col 3, probe = col 4, cost_usd = col 9).
-  local verdicts="$1" models m p v agg
-  models="$(awk -F, 'NR>1{x=$3; gsub(/^"|"$/,"",x); if(x!="")print x}' "$verdicts" | sort -u | tr '\n' ' ')"
+  local verdicts="$1" m p v agg
+  local models=()
   agg="$(mktemp)"
+  trap 'rm -f "$agg"' RETURN
+  # Columns = unique models, read into an array so keys with spaces or glob chars survive.
+  while IFS= read -r m; do [ -n "$m" ] && models+=("$m"); done \
+    < <(awk -F, 'NR>1{x=$3; gsub(/^"|"$/,"",x); if(x!="")print x}' "$verdicts" | sort -u)
+  [ "${#models[@]}" -gt 0 ] || return 0
+  # Aggregate candidate cost per probe|model into a TAB-delimited lookup (tab survives spaces).
   awk -F, 'function c(x){gsub(/^"|"$/,"",x); gsub(/""/,"\"",x); return x}
            NR>1{ k=c($4)"|"c($3); val=c($9); if(val=="NA"||val=="")val=0; cost[k]+=val }
-           END{ for(k in cost) printf "%s %.6f\n", k, cost[k] }' "$verdicts" > "$agg"
-  echo "Cost per task (USD, candidate cost)"
+           END{ for(k in cost) printf "%s\t%.6f\n", k, cost[k] }' "$verdicts" > "$agg"
+  echo "Cost per task (USD, candidate cost; summed across samples)"
   echo ""
-  printf '| Probe |'; for m in $models; do printf ' %s |' "$m"; done; echo
-  printf '%s' '|---|'; for m in $models; do printf '%s' '---|'; done; echo
+  printf '| Probe |'; for m in "${models[@]}"; do printf ' %s |' "$m"; done; echo
+  printf '%s' '|---|'; for m in "${models[@]}"; do printf '%s' '---|'; done; echo
   awk -F, 'NR>1{x=$4; gsub(/^"|"$/,"",x); if(x!="")print x}' "$verdicts" | sort -u | while IFS= read -r p; do
     printf '| %s |' "$p"
-    for m in $models; do
-      v="$(awk -v k="$p|$m" '$1==k{print $2; f=1} END{if(!f)print "-"}' "$agg")"
+    for m in "${models[@]}"; do
+      v="$(awk -F'\t' -v k="$p|$m" '$1==k{print $2; f=1} END{if(!f)print "-"}' "$agg")"
       printf ' %s |' "$v"
     done
     echo
   done
-  rm -f "$agg"
 }
 
 if [ -n "$LEGACY" ]; then
@@ -147,6 +152,16 @@ if [ "$BYTASK" -eq 1 ]; then
   bytask_report "$VERDICTS"
 fi
 
-if [ "$STRICT" -eq 1 ] && find "$RUN_DIR" -name status.json -exec jq -e '.status=="success"' {} + >/dev/null 2>&1; then
-  :
+# --strict: exit non-zero if any result in this run is not "success"
+# (status.json is {status, detail}; statuses other than success: skipped,
+# candidate_error, truncated_at_ceiling).
+if [ "$STRICT" -eq 1 ]; then
+  strict_bad=0
+  while IFS= read -r _sj; do
+    jq -e '.status=="success"' "$_sj" >/dev/null 2>&1 || strict_bad=1
+  done < <(find "$RUN_DIR" -name status.json)
+  if [ "$strict_bad" -eq 1 ]; then
+    echo "modelfit: --strict: at least one result is not 'success' in runs/$RUN_ID" >&2
+    exit 1
+  fi
 fi
