@@ -1,5 +1,7 @@
 # ModelFit
 
+[![CI](https://github.com/kwadwoadu/modelfit/actions/workflows/ci.yml/badge.svg)](https://github.com/kwadwoadu/modelfit/actions/workflows/ci.yml)
+
 **Find the best LLM for your codebase—not someone else’s benchmark.**
 
 ![ModelFit running a probe across candidate models, blind-judging, and ranking them](assets/demo.gif)
