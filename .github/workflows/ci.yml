@@ -27,4 +27,4 @@ jobs:
         run: ./bin/selftest.sh
 
       - name: shellcheck (catches word-splitting / SC2086 etc.)
-        run: shellcheck bin/run.sh bin/judge.sh bin/report.sh bin/doctor.sh bin/selftest.sh bin/scan-secrets.sh bin/modelfit bin/lib/common.sh tests/curl tests/reliability.test.sh
+        run: shellcheck bin/run.sh bin/judge.sh bin/report.sh bin/render.sh bin/doctor.sh bin/selftest.sh bin/scan-secrets.sh bin/modelfit bin/lib/common.sh tests/curl tests/reliability.test.sh tests/design.test.sh

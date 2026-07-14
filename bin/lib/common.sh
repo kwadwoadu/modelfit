@@ -88,6 +88,62 @@ category_for_probe() {
   awk -F': *' '/^category:/{print $2; exit}' "$1" | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr ',' ';'
 }
 
+scoring_for_probe() {
+  local v
+  v="$(awk -F': *' '/^scoring:/{print $2; exit}' "$1" | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+  [ -n "$v" ] || v="judge"
+  printf '%s' "$v"
+}
+
+b64_file() {
+  base64 -w0 "$1" 2>/dev/null || base64 "$1" | tr -d '\n'
+}
+
+render_html() {
+  local in="$1" out="$2" abs_in abs_out vp w h
+  abs_in="$(cd "$(dirname "$in")" && pwd)/$(basename "$in")"
+  ensure_parent "$out"
+  abs_out="$(cd "$(dirname "$out")" && pwd)/$(basename "$out")"
+  vp="${MODELFIT_RENDER_VIEWPORT:-1280x800}"
+  w="${vp%x*}"; h="${vp#*x}"
+  case "$w" in ''|*[!0-9]*) w=1280 ;; esac
+  case "$h" in ''|*[!0-9]*) h=800 ;; esac
+
+  # Explicit override wins and does not fall through.
+  if [ -n "${MODELFIT_RENDER_CMD:-}" ]; then
+    local cmd="$MODELFIT_RENDER_CMD"
+    cmd="${cmd//\{IN\}/$abs_in}"
+    cmd="${cmd//\{OUT\}/$abs_out}"
+    bash -c "$cmd" >&2 || { echo "render: MODELFIT_RENDER_CMD failed" >&2; return 1; }
+    [ -s "$abs_out" ] || { echo "render: no output PNG produced" >&2; return 1; }
+    return 0
+  fi
+
+  # Otherwise try each available renderer in turn, falling through on failure.
+  # 1) Playwright CLI (uses its own cached browser; full-page capable).
+  if command -v npx >/dev/null 2>&1 && npx --no-install playwright --version >/dev/null 2>&1; then
+    rm -f "$abs_out"
+    if npx --no-install playwright screenshot --full-page \
+         --viewport-size="$w,$h" "file://$abs_in" "$abs_out" >&2 2>&1 && [ -s "$abs_out" ]; then
+      return 0
+    fi
+  fi
+
+  # 2) A headless Chromium/Chrome binary.
+  local c
+  for c in chromium chromium-browser google-chrome google-chrome-stable; do
+    command -v "$c" >/dev/null 2>&1 || continue
+    rm -f "$abs_out"
+    if "$c" --headless=new --disable-gpu --no-sandbox --hide-scrollbars \
+         "--screenshot=$abs_out" "--window-size=$w,$h" "file://$abs_in" >&2 2>&1 && [ -s "$abs_out" ]; then
+      return 0
+    fi
+  done
+
+  echo "render: no renderer available (set MODELFIT_RENDER_CMD, or install Playwright / Chromium)" >&2
+  return 1
+}
+
 validate_config_file() {
   [ -f "$MODELFIT_CONFIG" ] || die "no config -- run: cp config/models.example.json config/models.json"
   jq -e '.judge and (.models|type=="array")' "$MODELFIT_CONFIG" >/dev/null ||

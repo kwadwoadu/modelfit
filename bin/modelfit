@@ -3,7 +3,7 @@ set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cmd="${1:-}"
-[ -n "$cmd" ] || { echo "usage: modelfit <doctor|run|judge|report|selftest|scan-secrets> ..." >&2; exit 1; }
+[ -n "$cmd" ] || { echo "usage: modelfit <doctor|run|judge|report|render|selftest|scan-secrets> ..." >&2; exit 1; }
 shift
 
 case "$cmd" in
@@ -11,6 +11,7 @@ case "$cmd" in
   run) exec "$ROOT/bin/run.sh" "$@" ;;
   judge) exec "$ROOT/bin/judge.sh" "$@" ;;
   report) exec "$ROOT/bin/report.sh" "$@" ;;
+  render) exec "$ROOT/bin/render.sh" "$@" ;;
   selftest) exec "$ROOT/bin/selftest.sh" "$@" ;;
   scan-secrets) exec "$ROOT/bin/scan-secrets.sh" "$@" ;;
   *)

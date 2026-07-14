@@ -37,6 +37,7 @@ load_env
 
 PROBE_FILE="$(probe_file_for "$PROBE")"
 require_nonempty_prompt "$PROBE_FILE" "$PROBE"
+SCORING="$(scoring_for_probe "$PROBE_FILE")"
 
 RUN_ID="${RUN_ID:-$(make_run_id)}"
 RUN_DIR="$MODELFIT_RUNS_DIR/$RUN_ID"
@@ -180,11 +181,26 @@ run_one_sample() {
     if [ -n "$stripped" ] && [ "$trunc" = "no" ]; then
       append_attempt "$ATTEMPTS" "$RUN_ID" "$sample" candidate "$key" "$model" "$PROBE" "$attempt" "$started" "$http" success "$maxtok" "$intok" "$outtok" "$lat" "$cost"
       printf '%s' "$text" | strip_fences > "$out/result.txt"
+      local rendered=false shot=""
+      if [ "$SCORING" = "screenshot" ]; then
+        cp "$out/result.txt" "$out/result.html"
+        if render_html "$out/result.html" "$out/result.png"; then
+          rendered=true; shot="result.png"
+          echo "[$key/$PROBE/sample-$sample] RENDERED -> $out/result.png"
+        else
+          append_attempt "$ATTEMPTS" "$RUN_ID" "$sample" candidate "$key" "$model" "$PROBE" "$attempt" "$started" "$http" render_error "$maxtok" "$intok" "$outtok" "$lat" "$cost"
+          status_json "$out/status.json" render_error "render failed for $out/result.html"
+          echo "[$key/$PROBE/sample-$sample] RENDER_ERROR: could not render $out/result.html"
+          return 1
+        fi
+      fi
       jq -n --arg model_key "$key" --arg model_id "$model" --arg provider "$provider" --arg probe "$PROBE" --arg run_id "$RUN_ID" --arg sample "$sample" \
         --arg latency_s "$lat" --arg input_tokens "$intok" --arg output_tokens "$outtok" --arg truncated "$trunc" --arg max_tokens "$maxtok" --arg cost_usd "$cost" \
+        --argjson rendered "$rendered" --arg screenshot "$shot" \
         '{model_key:$model_key, model_id:$model_id, provider:$provider, probe:$probe, run_id:$run_id, sample:($sample|tonumber),
           latency_s:$latency_s, input_tokens:$input_tokens, output_tokens:$output_tokens, truncated:$truncated,
-          max_tokens:($max_tokens|tonumber), cost_usd:$cost_usd}' > "$out/candidate.meta.json"
+          max_tokens:($max_tokens|tonumber), cost_usd:$cost_usd}
+         + (if $rendered then {rendered:true, screenshot:$screenshot} else {} end)' > "$out/candidate.meta.json"
       status_json "$out/status.json" success "candidate complete"
       echo "[$key/$PROBE/sample-$sample] SUCCESS ${lat}s in=$intok out=$outtok cost=\$$cost -> $out/result.txt"
       return 0
