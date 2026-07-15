@@ -82,6 +82,16 @@ If one model fails, the batch continues where possible but exits non-zero and th
 
 A good probe has one decisive discriminator: the subtle thing a weaker model gets wrong.
 
+### Testing design elements
+
+Probes carry a `scoring:` value in their frontmatter. Text probes use `scoring: judge` (the default). A **design probe** sets `scoring: screenshot`: the candidate returns a single self-contained HTML document, ModelFit renders it headlessly to a PNG, and the judge grades the **rendered screenshot** (layout, hierarchy, spacing, visible state) — not just the source text. See `probes/example-design.md`.
+
+- **Rendering requires a headless browser.** Install [Playwright](https://playwright.dev/) (`npx playwright install chromium`) or a Chromium/Chrome binary (`chromium`, `google-chrome`, ...). This is the only extra dependency and is used solely for `scoring: screenshot` probes at run time; selftest and CI never need it.
+- **Override the renderer** with `MODELFIT_RENDER_CMD`, a command template containing `{IN}` and `{OUT}` placeholders (e.g. `MODELFIT_RENDER_CMD='wkhtmltoimage {IN} {OUT}'`).
+- **Viewport** defaults to `1280x800`; override with `MODELFIT_RENDER_VIEWPORT=1440x900`.
+- Screenshot samples write both `result.html` (the source) and `result.png` (the render). If rendering fails, the sample is marked `render_error` and counts as a failure so coverage stays honest.
+- Render a saved HTML file by hand with `./bin/modelfit render <html_in> <png_out>`.
+
 ## How scoring works
 
 - `run.sh` sends each probe to candidates, strips markdown fences, retries empty/truncated replies up to the token ceiling, and records every attempt in `runs/<run-id>/attempts.csv`.

@@ -9,3 +9,4 @@ ModelFit is a practical decision tool, not a formal scientific benchmark.
 - Token usage and prices may be missing or stale. Missing cost is shown as `NA`, never zero.
 - One sample is not enough to prove a stable ranking. Use repeated samples when decisions are close.
 - Generated probes may contain proprietary code or sensitive data. Review before sending to providers.
+- Visual judging (`scoring: screenshot`) is subjective and single-viewport: the judge grades one rendered screenshot at one resolution. Screenshots do not test interactivity, hover/focus states, animation, or any JS behavior beyond the initial render.

@@ -5,7 +5,14 @@ data=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     -o) shift; out="$1" ;;
-    -d) shift; data="$1" ;;
+    -d|--data|--data-binary|--data-raw)
+      shift
+      case "$1" in
+        @-) data="$(cat)" ;;
+        @*) data="$(cat "${1#@}")" ;;
+        *) data="$1" ;;
+      esac
+      ;;
     http*) ;;
   esac
   shift || true

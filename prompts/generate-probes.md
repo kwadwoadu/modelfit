@@ -63,6 +63,39 @@ Rules:
 - Do not include secrets, full customer records or unnecessary large source dumps.
 - Keep one decisive discriminator per probe.
 
+### Design probes (optional)
+
+If the target repo ships UI (components, pages, CSS, Tailwind, design system), also generate 1–2 `scoring: screenshot` probes. These are RENDERED and judged visually, not read as source.
+
+- The PROMPT must ask for a SINGLE self-contained HTML document: inline CSS, no external network requests (no CDN links, web fonts, or remote images), and "Output ONLY the HTML."
+- The RUBRIC must be gradable from a RENDERED SCREENSHOT — visual layout, hierarchy, spacing, alignment, and visible state — not from reading the source. Each M criterion must be visible in the image.
+- Set `scoring: screenshot` in the frontmatter:
+
+```
+---
+id: pricing-cards
+category: design
+scoring: screenshot
+target_repo: <basename only>
+target_commit: <git sha or unknown>
+generated_at: <UTC timestamp>
+---
+
+# PROMPT
+<ask for one self-contained HTML document with specific, visually-checkable requirements. Output ONLY the HTML.>
+
+# RUBRIC
+Discriminator: <one sentence>
+
+PASS requires ALL of:
+- M1 <criterion visible in the screenshot>
+- M2 <criterion visible in the screenshot>
+
+FAIL if: <broken/blank render, overflow, missing element>
+
+Quality pluses: <nice-to-haves>
+```
+
 ## Step 4 — Hand back
 
 Show the probe list and tell the user to review sensitive content before running:

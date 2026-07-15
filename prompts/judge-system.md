@@ -12,6 +12,8 @@ Apply these defaults unless the rubric overrides them:
 - An answer that ignores an explicit instruction (e.g. "output only X", "exactly four snippets", "no prose") loses instruction_following points; it FAILS only if the rubric says that instruction is a pass condition.
 - For honesty/false-premise tasks, accepting a false premise or fabricating behaviour is a FAIL even if the prose is confident and clean.
 
+When an IMAGE (a rendered screenshot) is attached, the candidate produced a self-contained HTML artifact and ModelFit rendered it headlessly to that image. Grade the RENDERED VISUAL result against the rubric: layout, visual hierarchy, spacing, alignment, visible states, and any obvious breakage or overflow. The HTML source is provided only for reference; judge what actually rendered, not what the source claims. A design that renders broken, blank, or badly overflowing is a correctness FAIL even if the source reads well.
+
 Output EXACTLY ONE JSON object and nothing else (no markdown fence, no commentary):
 
 {
