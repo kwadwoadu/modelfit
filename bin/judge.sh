@@ -35,6 +35,11 @@ J_BASE="$(jq -r '.judge.base_url' "$MODELFIT_CONFIG")"
 J_MODEL="$(jq -r '.judge.model_id' "$MODELFIT_CONFIG")"
 J_KEYENV="$(jq -r '.judge.key_env' "$MODELFIT_CONFIG")"
 J_TPARAM="$(jq -r '.judge.token_param // "max_tokens"' "$MODELFIT_CONFIG")"
+# Judge pricing is optional and defaults to 0, which keeps older configs working.
+# Set .judge.price_in / .judge.price_out to make the "Judge $" and "Actual total $"
+# columns real; leave them unset and judging reads as free, which it is not.
+J_PIN="$(jq -r '.judge.price_in // 0' "$MODELFIT_CONFIG")"
+J_POUT="$(jq -r '.judge.price_out // 0' "$MODELFIT_CONFIG")"
 for f in J_PROVIDER J_BASE J_MODEL J_KEYENV; do
   v="${!f}"
   if [ -z "$v" ] || [ "$v" = "null" ]; then
@@ -147,7 +152,7 @@ curl_judge() {
       outtok="$(jq -r '.usage.output_tokens // "NA"' "$raw")"
       [ "$(jq -r '.stop_reason // ""' "$raw")" = "max_tokens" ] && trunc="yes" || trunc="no"
     fi
-    cost="$(calc_cost "$intok" "$outtok" 0 0)"
+    cost="$(calc_cost "$intok" "$outtok" "$J_PIN" "$J_POUT")"
     stripped="$(printf '%s' "$text" | tr -d '[:space:]')"
     if [ -n "$stripped" ] && [ "$trunc" = "no" ]; then
       append_attempt "$ATTEMPTS" "$RUN_ID" "$sample" judge "$key" "$J_MODEL" "$PROBE" 1 "$started" "$http" success "$maxtok" "$intok" "$outtok" "$lat" "$cost"

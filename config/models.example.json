@@ -6,7 +6,10 @@
     "base_url": "https://api.anthropic.com",
     "model_id": "claude-opus-4-8",
     "key_env": "ANTHROPIC_API_KEY",
-    "token_param": "max_tokens"
+    "token_param": "max_tokens",
+    "_price_comment": "Optional, default 0. Set both to make the report's Judge $ and Actual total $ columns real -- judging a full suite is not free, and omitting these makes it look like it is.",
+    "price_in": 15.00,
+    "price_out": 75.00
   },
 
   "models": [
