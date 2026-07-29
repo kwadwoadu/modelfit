@@ -68,6 +68,19 @@ grep -q 'rate limited' /tmp/modelfit-test-fail.out || {
 grep -q 'raw response:' /tmp/modelfit-test-fail.out || {
   cat /tmp/modelfit-test-fail.out; echo "http_error did not point at the raw response file"; exit 1; }
 
+# Providers that hide reasoning tokens (Gemini's OpenAI-compatible endpoint) report
+# completion_tokens EXCLUDING thinking while billing output INCLUDING it. Billed output
+# must be total - prompt (120), not completion_tokens (20), or the cost column silently
+# understates the most expensive models. price_out is 2, price_in 1, so 120 output
+# tokens cost 0.000250 rather than 0.000050.
+export MODELFIT_FAKE_SCENARIO=hidden_thinking
+MODELFIT_RUN_ID=run_thinking "$ROOT/bin/run.sh" example-chunk fake --samples 1 >/tmp/modelfit-test-thinking.out 2>&1 ||
+  { cat /tmp/modelfit-test-thinking.out; echo "hidden_thinking run failed"; exit 1; }
+awk -F, 'NR>1 {gsub(/"/,""); if ($3=="candidate") { out=$13; cost=$NF } } END{
+  if (out != 120) { print "billed output tokens was " out ", expected 120"; exit 1 }
+  if (cost+0 < 0.00024 || cost+0 > 0.00026) { print "cost was " cost ", expected ~0.000250"; exit 1 }
+}' "$tmp/runs/run_thinking/attempts.csv" || { cat "$tmp/runs/run_thinking/attempts.csv"; exit 1; }
+
 unset MODELFIT_FAKE_SCENARIO
 MODELFIT_RUN_ID=run_bad_judge "$ROOT/bin/run.sh" example-chunk fake >/tmp/modelfit-test-run2.out || { cat /tmp/modelfit-test-run2.out; exit 1; }
 export MODELFIT_FAKE_SCENARIO=invalid_verdict

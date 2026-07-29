@@ -144,7 +144,7 @@ curl_judge() {
     if [ "$J_PROVIDER" = "openai" ]; then
       text="$(jq -r '.choices[0].message.content // ""' "$raw")"
       intok="$(jq -r '.usage.prompt_tokens // "NA"' "$raw")"
-      outtok="$(jq -r '.usage.completion_tokens // "NA"' "$raw")"
+      outtok="$(jq -r "$OPENAI_BILLED_OUT_TOKENS" "$raw")"
       [ "$(jq -r '.choices[0].finish_reason // ""' "$raw")" = "length" ] && trunc="yes" || trunc="no"
     else
       text="$(jq -r '[.content[]?|select(.type=="text")|.text]|join("")' "$raw")"
