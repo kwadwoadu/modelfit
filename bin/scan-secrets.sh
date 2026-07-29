@@ -22,6 +22,18 @@ for f in .env config/models.json; do
 done
 if printf '%s\n' "$tracked" | grep -q '^runs/'; then flag "runs/ outputs are tracked"; else ok "runs/ not tracked"; fi
 
+# 1b. generated probes are built FROM a target repo and can carry its proprietary
+#     code or data. Only the shipped example-*.md probes belong in git. Checked here
+#     as well as in .gitignore so loosening the ignore rule cannot silently publish
+#     someone's codebase.
+gen_probes="$(printf '%s\n' "$tracked" | grep '^probes/' | grep -v '^probes/example-[^/]*\.md$')"
+if [ -n "$gen_probes" ]; then
+  printf '%s\n' "$gen_probes" | while read -r f; do flag "generated probe is tracked: $f"; done
+  bad=1
+else
+  ok "no generated probes tracked (only example-*.md)"
+fi
+
 # 2. key-shaped strings in tracked files. Probes are .md and users may paste a key into
 #    one, so .md IS scanned; only known-placeholder files (.env.example, *.example.*) are
 #    skipped. Patterns are case-insensitive and match any *_KEY/*_SECRET/*_TOKEN/PASSWORD

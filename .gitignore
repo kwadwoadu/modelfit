@@ -6,6 +6,13 @@ config/models.json
 *.local.sh
 lib/keys.local.sh
 
+# Generated probes are built FROM a target repo, so they can carry that repo's
+# proprietary code, schema, customer data or credentials. This repo is public and
+# probes/ was tracked, so a stray `git add -A` after a run would publish someone
+# else's codebase. Ignore generated probes; keep the shipped examples.
+probes/*
+!probes/example-*.md
+
 # Run outputs (can contain large or sensitive model answers)
 runs/
 
