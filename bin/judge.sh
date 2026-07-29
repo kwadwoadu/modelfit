@@ -91,7 +91,7 @@ validate_verdict() {
 
 curl_judge() {
   local raw="$1" text_out="$2" user="$3" sample="$4" key="$5" image="${6:-}" maxtok="$J_TOK_START"
-  local body curl_out curl_rc http lat err text trunc stripped started outtok intok cost outcome b64tmp=""
+  local body curl_out curl_rc http lat err text trunc stripped started outtok intok cost outcome detail b64tmp=""
   if [ -n "$image" ] && [ -f "$image" ]; then
     b64tmp="$(mktemp)"
     b64_file "$image" > "$b64tmp"
@@ -122,7 +122,10 @@ curl_judge() {
     intok="NA"; outtok="NA"; cost="NA"
     if [ "$curl_rc" -ne 0 ]; then
       outcome="curl_error"; case "$http" in 4*|5*) outcome="http_error" ;; esac
+      detail="$(http_error_detail "$raw")"
       append_attempt "$ATTEMPTS" "$RUN_ID" "$sample" judge "$key" "$J_MODEL" "$PROBE" 1 "$started" "$http" "$outcome" "$maxtok" "$intok" "$outtok" "$lat" "$cost"
+      echo "[$key/$PROBE/sample-$sample] judge $outcome http=$http$detail"
+      echo "[$key/$PROBE/sample-$sample] raw response: $raw"
       [ -n "$b64tmp" ] && rm -f "$b64tmp"
       return 1
     fi

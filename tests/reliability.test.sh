@@ -54,6 +54,12 @@ if MODELFIT_RUN_ID=run_fail "$ROOT/bin/run.sh" example-chunk fake >/tmp/modelfit
   exit 1
 fi
 jq -e '.status=="partial"' "$tmp/runs/run_fail/manifest.json" >/dev/null || { cat "$tmp/runs/run_fail/manifest.json"; exit 1; }
+# An HTTP failure must surface the provider's own message, not just the status code:
+# curl runs with --fail-with-body, so the reason is already on disk. Regression guard.
+grep -q 'rate limited' /tmp/modelfit-test-fail.out || {
+  cat /tmp/modelfit-test-fail.out; echo "http_error did not surface the provider message"; exit 1; }
+grep -q 'raw response:' /tmp/modelfit-test-fail.out || {
+  cat /tmp/modelfit-test-fail.out; echo "http_error did not point at the raw response file"; exit 1; }
 
 unset MODELFIT_FAKE_SCENARIO
 MODELFIT_RUN_ID=run_bad_judge "$ROOT/bin/run.sh" example-chunk fake >/tmp/modelfit-test-run2.out || { cat /tmp/modelfit-test-run2.out; exit 1; }

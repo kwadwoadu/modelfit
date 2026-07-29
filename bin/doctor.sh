@@ -6,6 +6,10 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=bin/lib/common.sh
 . "$ROOT/bin/lib/common.sh"
 
+# run.sh and judge.sh both read keys from .env; doctor must look in the same place
+# or it reports "key env not set" for a correctly configured install.
+load_env
+
 TARGET=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
