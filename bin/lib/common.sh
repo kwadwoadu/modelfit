@@ -17,6 +17,17 @@ load_env() {
   [ -f "$MODELFIT_ROOT/.env" ] && { set -a; . "$MODELFIT_ROOT/.env"; set +a; }
 }
 
+# curl runs with --fail-with-body, so on a 4xx/5xx the provider's own error body is
+# already sitting in the raw file. Surface it instead of showing a bare status code.
+# Prints " -- <message>" when a message is available, otherwise nothing.
+http_error_detail() {
+  local raw="$1" msg=""
+  [ -s "$raw" ] || return 0
+  msg="$(jq -r '(.error.message // .error // .message // empty) | if type=="string" then . else tojson end' "$raw" 2>/dev/null)"
+  [ -n "$msg" ] || msg="$(head -c 200 "$raw" | tr '\n' ' ')"
+  [ -n "$msg" ] && printf ' -- %s' "$msg"
+}
+
 make_run_id() {
   if [ -n "${MODELFIT_RUN_ID:-}" ]; then
     printf '%s' "$MODELFIT_RUN_ID"

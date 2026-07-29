@@ -121,7 +121,7 @@ run_one_sample() {
   fi
 
   local maxtok="$TOK_START" attempt=0
-  local raw="$out/candidate.raw.json" text intok outtok trunc stripped body curl_out curl_rc http lat err outcome cost started
+  local raw="$out/candidate.raw.json" text intok outtok trunc stripped body curl_out curl_rc http lat err outcome cost started detail
   while : ; do
     attempt=$((attempt + 1))
     started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -146,9 +146,11 @@ run_one_sample() {
     if [ "$curl_rc" -ne 0 ]; then
       outcome="curl_error"
       case "$http" in 4*|5*) outcome="http_error" ;; esac
+      detail="$(http_error_detail "$raw")"
       append_attempt "$ATTEMPTS" "$RUN_ID" "$sample" candidate "$key" "$model" "$PROBE" "$attempt" "$started" "$http" "$outcome" "$maxtok" "$intok" "$outtok" "$lat" "$cost"
-      status_json "$out/status.json" candidate_error "$outcome http=$http"
-      echo "[$key/$PROBE/sample-$sample] $outcome http=$http"
+      status_json "$out/status.json" candidate_error "$outcome http=$http$detail"
+      echo "[$key/$PROBE/sample-$sample] $outcome http=$http$detail"
+      echo "[$key/$PROBE/sample-$sample] raw response: $raw"
       return 1
     fi
     if [ ! -s "$raw" ] || ! jq -e 'type=="object"' "$raw" >/dev/null 2>&1; then
