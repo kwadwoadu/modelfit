@@ -30,6 +30,13 @@ case "$scenario" in
     printf '502\t0.010'
     exit 0
     ;;
+  hidden_thinking)
+    # Mimics Gemini's OpenAI-compatible endpoint: completion_tokens EXCLUDES thinking,
+    # but total_tokens includes it, so billed output is total - prompt (120), not 20.
+    printf '{"choices":[{"message":{"content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":20,"total_tokens":130}}' > "$out"
+    printf '200\t0.010'
+    exit 0
+    ;;
 esac
 
 if printf '%s' "$data" | grep -q 'Return ONLY the JSON verdict object'; then

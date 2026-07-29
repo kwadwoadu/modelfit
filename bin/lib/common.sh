@@ -28,6 +28,23 @@ http_error_detail() {
   [ -n "$msg" ] && printf ' -- %s' "$msg"
 }
 
+# jq filter for BILLED output tokens on an OpenAI-compatible response.
+#
+# Some providers hide reasoning/thinking tokens. Gemini's OpenAI-compatible endpoint
+# reports completion_tokens EXCLUDING thinking while billing output INCLUDING it, so
+# (total_tokens - prompt_tokens) can be several times completion_tokens: one observed
+# call reported prompt=256, completion=5994, total=16636, leaving 10386 thinking
+# tokens uncounted and understating that call's cost by ~2.7x. OpenAI's own reasoning
+# models already fold reasoning into completion_tokens, where the two figures agree.
+# Taking the max is therefore correct for both and never under-reports the bill.
+# shellcheck disable=SC2034  # consumed by run.sh and judge.sh, which source this file
+OPENAI_BILLED_OUT_TOKENS='
+  if (.usage.completion_tokens // null) == null then "NA"
+  elif (.usage.total_tokens // null) != null and (.usage.prompt_tokens // null) != null
+    then ([.usage.completion_tokens, (.usage.total_tokens - .usage.prompt_tokens)] | max)
+  else .usage.completion_tokens
+  end'
+
 make_run_id() {
   if [ -n "${MODELFIT_RUN_ID:-}" ]; then
     printf '%s' "$MODELFIT_RUN_ID"
