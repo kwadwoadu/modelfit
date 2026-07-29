@@ -14,7 +14,9 @@ cat > "$config" <<'JSON'
     "base_url": "https://fake.test",
     "model_id": "fake-judge",
     "key_env": "TEST_API_KEY",
-    "token_param": "max_tokens"
+    "token_param": "max_tokens",
+    "price_in": 10,
+    "price_out": 20
   },
   "models": [
     {
@@ -44,6 +46,11 @@ MODELFIT_RUN_ID=run_success "$ROOT/bin/run.sh" example-chunk fake --samples 2 >/
 
 "$ROOT/bin/judge.sh" example-chunk fake run_success >/tmp/modelfit-test-judge.out || { cat /tmp/modelfit-test-judge.out; exit 1; }
 [ "$(awk 'END{print NR}' "$tmp/runs/run_success/verdicts.csv")" -eq 3 ] || { echo "expected two verdicts plus header"; exit 1; }
+# Judge cost must reflect .judge.price_in/.price_out. It was hardcoded to 0/0, which
+# made judging look free in the report when it is usually the dominant cost.
+awk -F, 'NR>1 {gsub(/"/,""); if ($3=="judge" && ($NF+0)>0) found=1} END{exit !found}' "$tmp/runs/run_success/attempts.csv" || {
+  echo "judge attempts recorded zero cost despite judge pricing being configured"
+  grep ',judge,' "$tmp/runs/run_success/attempts.csv"; exit 1; }
 "$ROOT/bin/report.sh" --run-id run_success >/tmp/modelfit-test-report.out || { cat /tmp/modelfit-test-report.out; exit 1; }
 grep -q 'Actual total' /tmp/modelfit-test-report.out || { cat /tmp/modelfit-test-report.out; exit 1; }
 
